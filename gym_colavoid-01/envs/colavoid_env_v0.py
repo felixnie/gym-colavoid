@@ -6,12 +6,6 @@ import time
 import numpy as np
 from gym.envs.classic_control import rendering
 
-# changelog
-# changed the way for escaping detection
-# changed penalty
-# changed r range_detection to 8
-# num_intruders = 1
-# experimental reward
 
 class ColAvoidEnvDiscrete(gym.Env):
     # metadata = {'render.modes': ['human']}
@@ -35,7 +29,7 @@ class ColAvoidEnvDiscrete(gym.Env):
                                                 # (it can also stop, etc)
 
         # LiDAR PARAMETERS
-        self.range_detection = np.array([self.R,8])       
+        self.range_detection = np.array([self.R,5])       
                                                 # detection range (m)
                                                 # (radius of vehicle ~ 5)
         self.range_view = np.array([0,2*np.pi]) # field of view
@@ -45,7 +39,7 @@ class ColAvoidEnvDiscrete(gym.Env):
         # INTRUDER PARAMETERS
         self.r = 0.4                            # radius (m)
         self.s = 2                              # speed (m/s)
-        self.num_intruders = 1                  # number of intruders at the 
+        self.num_intruders = 3                  # number of intruders at the 
                                                 # same time
 
         # STATUS
@@ -75,14 +69,10 @@ class ColAvoidEnvDiscrete(gym.Env):
         self.steps_beyond_done = None
         
         self.reward = 0
-        self.reward_1 = 0
         self.penalty_1 = 0
         self.penalty_2 = 0
         self.penalty_3 = 0
         
-        # self.tries = 0 # how many intruders generated
-        # self.fails = 0 # how many collisions up to now
-        # self.n_steps = 0 # how many steps (frames) up to now
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
@@ -106,61 +96,43 @@ class ColAvoidEnvDiscrete(gym.Env):
         
         # reward
         
-        # # reward 1: survive
-        # reward_1 = 3.0 if not done else -3.0
-        reward_1 = 1.0 if not done else -100000.0
+        # reward 1: survive
+        reward_1 = 3.0 if not done else -3.0
         
-        # # penalty 1: distance to (0, 0)
-        # # 0 ~ 1
-        # penalty_1 = np.min([self.dist_to_position() ** 2 / 5.0 ** 2, 1.0])
-        penalty_1 = self.dist_to_position() ** 2
+        # penalty 1: distance to (0, 0)
+        # 0 ~ 1
+        penalty_1 = np.min([self.dist_to_position() ** 2 / 5.0 ** 2, 1.0])
         
-        # # penalty_2: distance to closest intruder
-        # # 0 ~ 1
-        # penalty_2 = 1.0 * (self.range_detection[1] - self.dist_to_intruder()) ** 2 / (self.range_detection[1] - self.range_detection[0]) ** 2
-        penalty_2 = (self.range_detection[1] - self.dist_to_intruder()) ** 2
+        # penalty_2: distance to closest intruder
+        # 0 ~ 1
+        penalty_2 = 1.0 * (self.range_detection[1] - self.dist_to_intruder()) ** 2 / (self.range_detection[1] - self.range_detection[0]) ** 2
         
-        # # penalty 3: large changes on speed and direction
-        # penalty_3 = 0.5 * 1.0 if self.vel_agents != 8 else 0.0
-        penalty_3 = 1.0 if self.vel_agents != 8 else 0.0
+        # penalty 3: large changes on speed and direction
+        penalty_3 = 0.5 * 1.0 if self.vel_agents != 8 else 0.0
         
-        reward = 1 * reward_1 - 1 * penalty_1 - 0 * penalty_2 - 0 * penalty_3
-        
-        # if not done:
-        #     pass
-        #     # reward = reward_1 - 10 * penalty_1 - 1.0 * penalty_2 - 1.0 * penalty_3
-        # elif self.steps_beyond_done is None:
-        #     # just failed
-        #     self.steps_beyond_done = 0
-        #     # reward = reward_1 - 10 * penalty_1 - 1.0 * penalty_2 - 1.0 * penalty_3
-        # else:
-        #     if self.steps_beyond_done == 0:
-        #         logger.warn(
-        #             "You are calling 'step()' even though this "
-        #             "environment has already returned done = True. You "
-        #             "should always call 'reset()' once you receive 'done = "
-        #             "True' -- any further steps are undefined behavior."
-        #         )
-        #     self.steps_beyond_done += 1
-        #     # reward = reward_1 - 10 * penalty_1 - 1.0 * penalty_2 - 1.0 * penalty_3
-        #     self.reset()
+        reward = reward_1 - penalty_1 - penalty_2 - penalty_3
+        if not done:
+            pass
+            # reward = reward_1 - 10 * penalty_1 - 1.0 * penalty_2 - 1.0 * penalty_3
+        elif self.steps_beyond_done is None:
+            # just failed
+            self.steps_beyond_done = 0
+            # reward = reward_1 - 10 * penalty_1 - 1.0 * penalty_2 - 1.0 * penalty_3
+        else:
+            if self.steps_beyond_done == 0:
+                logger.warn(
+                    "You are calling 'step()' even though this "
+                    "environment has already returned done = True. You "
+                    "should always call 'reset()' once you receive 'done = "
+                    "True' -- any further steps are undefined behavior."
+                )
+            self.steps_beyond_done += 1
+            # reward = reward_1 - 10 * penalty_1 - 1.0 * penalty_2 - 1.0 * penalty_3
+            self.reset()
 
         info = {}
-        self.reward, self.reward_1, self.penalty_1, self.penalty_2, self.penalty_3 = \
-            reward, reward_1, penalty_1, penalty_2, penalty_3
-        
-        # self.n_steps += 1                                         # stat: steps
-        if done:
-            # self.fails += 1                                     # stat: fails
-            self.reset()
-            
-        # only for training
-        # print("%d fails in %d tries and %d steps" % (self.fails, self.tries, self.steps))
-        # print("%d %d %d" % (self.fails, self.tries, self.steps))
-        
-        # self.render()
-        
-            
+        self.reward, self.penalty_1, self.penalty_2, self.penalty_3 = reward, penalty_1, penalty_2, penalty_3
+        # print(str(reward) + '\t' + str(penalty_1) + '\t' + str(penalty_2) + '\t' + str(penalty_3))
         return self.observation, reward, done, info
 
 
@@ -207,17 +179,13 @@ class ColAvoidEnvDiscrete(gym.Env):
 
         for i in range(self.num_intruders):
             # check if they lie outside a circle of r > 10
-            if np.linalg.norm(self.pos_intruders[i]) > 8:
+            if np.linalg.norm(self.pos_intruders[i]) > self.map_size / 2:
                 # the place to initialize
                 # place them on a circle with radius = 10m
-                a = 2 * np.pi * random.random()
-                # x = self.map_size / 2 * np.cos(angle)
-                # y = self.map_size / 2 * np.sin(angle)
-                x = 8 * np.cos(a)
-                y = 8 * np.sin(a)
+                angle = 2 * np.pi * random.random()
+                x = self.map_size / 2 * np.cos(angle)
+                y = self.map_size / 2 * np.sin(angle)
                 self.pos_intruders[i] = np.array([x, y])
-                
-                # print(str(angle/np.pi)) ########################## unsolved
                 
                 # # strategy 1: head to a region around (0, 0)
                 # # randomly select an angle for each intruder
@@ -229,16 +197,7 @@ class ColAvoidEnvDiscrete(gym.Env):
                 # strategy 2: head to the agent directly
                 dx = self.pos_agents[0][0] - self.pos_intruders[i][0]
                 dy = self.pos_agents[0][1] - self.pos_intruders[i][1]
-                if dx == 0:
-                    dx = 0.000000000001
-                if dx > 0:
-                    self.vel_intruders[i] = np.arctan(dy/dx)
-                else:
-                    self.vel_intruders[i] = np.arctan(dy/dx) + np.pi
-                    
-                
-        # new intruder generated
-        # self.tries += 1                                         # stat: tries
+                self.vel_intruders[i] = np.arctan(dy/dx)
                 
 
     def observe(self):
@@ -281,9 +240,7 @@ class ColAvoidEnvDiscrete(gym.Env):
     
     def check_escape(self):
         escape = False
-        # if np.max(np.abs(self.pos_agents[0])) > self.map_size / 2:
-        #     escape = True
-        if np.linalg.norm(self.pos_agents[0]) > 8:
+        if np.max(np.abs(self.pos_agents[0])) > self.map_size / 2:
             escape = True
         return escape
     

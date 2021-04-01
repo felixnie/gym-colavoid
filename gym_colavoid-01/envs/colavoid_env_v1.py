@@ -35,8 +35,8 @@ class ColAvoidEnv(gym.Env):
 
         # VEHICLE PARAMETERS
         self.R = 0.4                            # radius (m)
-        self.S = np.array([0.0, 1.0])           # range of speed (m/s)
-        self.DIR = np.array([0.0, 2 * np.pi])   # range of direction
+        self.S = np.array([0.0,1.0])            # range of speed (m/s)
+        self.DIR = np.array([0.0,np.pi])        # range of direction
         self.num_agents = 1                     # number of vehicles
 
         # LiDAR PARAMETERS
@@ -60,13 +60,12 @@ class ColAvoidEnv(gym.Env):
             np.concatenate((min_speed, min_dir)), 
             np.concatenate((max_speed, max_dir)),
             dtype=np.float32)
-        print(np.concatenate((min_speed, min_dir)))
-        print(np.concatenate((max_speed, max_dir)))
-        
+        print(type(self.action_space))
+
         # OBSERVATION SPACE
         self.num_values = (self.num_intruders + self.num_agents - 1) * self.num_agents
         # relative distance
-        min_rel_dist    = np.ones(self.num_values) * 0.0
+        min_rel_dist    = np.zeros(self.num_values)
         max_rel_dist    = np.ones(self.num_values) * self.map_size * np.sqrt(2)
         # relative direction
         min_rel_dir     = np.ones(self.num_values) * self.DIR[0]
@@ -88,8 +87,7 @@ class ColAvoidEnv(gym.Env):
         self.vel_intruders  = None
         self.pos_intruders  = None
         self.observation    = None              # (N+M-1)*M + (N+M-1)*M + M*2
-        
-        self.init_pos_agents = None
+                
         self.seed()
         self.viewer = None
         self.steps_beyond_done = None
@@ -106,10 +104,9 @@ class ColAvoidEnv(gym.Env):
         self.pos_agents     = np.zeros([self.num_agents, 2])
         self.vel_intruders  = np.zeros([self.num_intruders, 2])
         self.pos_intruders  = np.zeros([self.num_intruders * 2])
-        self.observation    = np.concatenate((self.rel_pos.flatten('F'), 
+        self.observation    = np.concatenate((self.rel_pos.faltten('F'), 
                                               self.pos_agents.flatten('F')))
-        
-        self.init_pos_agents = self.init_agents()
+        self.init_agents()
         self.init_intruders()
 
         # self.observation = self.range_detection[0] * np.ones(42)
@@ -135,8 +132,6 @@ class ColAvoidEnv(gym.Env):
                 "Please go to init_agents() to edit.",
                 self.num_agents
             )
-            
-        return self.pos_agents
                 
     
     def init_intruders(self):
@@ -173,8 +168,8 @@ class ColAvoidEnv(gym.Env):
     
     def step(self, action):
         # check if the actions are legitimate
-        #err_msg = "%r (%s) invalid" % (action, type(action))
-        #assert self.action_space.contains(action), err_msg
+        err_msg = "%r (%s) invalid" % (action, type(action))
+        assert self.action_space.contains(action), err_msg
         
         # action space to velocity matrix (speed, direction)
         self.vel_agents = np.reshape(action, (self.num_agents, 2), order='F')
@@ -221,7 +216,7 @@ class ColAvoidEnv(gym.Env):
         # self.pos_agents     = np.zeros([self.num_agents, 2])
         # self.vel_intruders  = np.zeros([self.num_intruders, 2])
         # self.pos_intruders  = np.zeros([self.num_intruders * 2])
-        # self.observation    = np.concatenate((self.rel_pos.flatten('F'), 
+        # self.observation    = np.concatenate((self.rel_pos.faltten('F'), 
         #                                       self.pos_agents.flatten('F')))
                                               
         for i in range(self.num_agents):
@@ -245,7 +240,7 @@ class ColAvoidEnv(gym.Env):
                 idx = idx + 1
                 self.rel_pos[idx] = np.array([rel_dist, rel_dir])
 
-        self.observation = np.concatenate((self.rel_pos.flatten('F'), 
+        self.observation = np.concatenate((self.rel_pos.faltten('F'), 
                                            self.pos_agents.flatten('F')))
         return self.observation
                     
@@ -261,24 +256,16 @@ class ColAvoidEnv(gym.Env):
     
     
     def reward(self):
-        # reward R
-        # distance to origin penalty P1
-        dist = self.pos_agents - self.init_pos_agents
-        P1 = np.mean(np.linalg.norm(dist, axis=1))
-        
-        # distance to each other
-        dist = np.max(self.max_detection - self.rel_pos[:, 0], 0)
-        P2 = np.mean(dist)
-        
+        # reward
         done = bool(self.check_collision() or self.check_escape())
-        
-        reward = 1.0 - 0.01 * P1 ** 2 - 0.01 * P2 ** 2
-        
         if not done:
-            pass
+            distance = np.linalg.norm(self.pos_agents)
+            reward = 1.0 - 0.01 * distance ** 2
         elif self.steps_beyond_done is None:
             # just failed
             self.steps_beyond_done = 0
+            distance = np.linalg.norm(self.pos_agents)
+            reward = 1.0 - 0.01 * distance ** 2
         else:
             if self.steps_beyond_done == 0:
                 logger.warn(
@@ -290,7 +277,6 @@ class ColAvoidEnv(gym.Env):
             self.steps_beyond_done += 1
             reward = 0
             self.reset()
-            
         return reward
     
 
@@ -310,7 +296,7 @@ class ColAvoidEnv(gym.Env):
             for i in range(self.num_agents):
                 self.agents_trans[i] = rendering.Transform()
                         
-                self.ranges[i] = rendering.make_circle(self.max_detection * scale)
+                self.ranges[i] = rendering.make_circle(self.range_detection[1] * scale)
                 self.ranges[i].set_color(.9, .9, .6)
                 self.ranges[i].add_attr(self.agents_trans[i])
                 self.viewer.add_geom(self.ranges[i])
@@ -334,6 +320,7 @@ class ColAvoidEnv(gym.Env):
             x = self.pos_agents[i, 0] * scale + screen_size / 2.0
             y = self.pos_agents[i, 1] * scale + screen_size / 2.0
             self.agents_trans[i].set_translation(x, y)
+            print([x, y])
             
         for i in range(self.num_intruders):
             x = self.pos_intruders[i, 0] * scale + screen_size / 2.0
