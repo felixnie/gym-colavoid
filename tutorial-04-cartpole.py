@@ -10,6 +10,7 @@ from gym import spaces, logger
 from gym.utils import seeding
 import numpy as np
 
+mode = 'train'
 
 class CartPoleEnv(gym.Env):
     """
@@ -87,6 +88,12 @@ class CartPoleEnv(gym.Env):
         self.state = None
 
         self.steps_beyond_done = None
+        
+        
+        # debug
+        if mode == 'debug':
+            print(['init'])
+            self.reward = 0
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
@@ -126,15 +133,36 @@ class CartPoleEnv(gym.Env):
             or theta < -self.theta_threshold_radians
             or theta > self.theta_threshold_radians
         )
+        # debug ===============================================================
+        if mode == 'debug':
+            print(['step'])
+            self.reward += 1.0
+            if self.reward == 12:
+                done = True
 
         if not done:
             reward = 1.0
+            # debug ===========================================================
+            if mode == 'debug':
+                reward = self.reward
+                
         elif self.steps_beyond_done is None:
+            # debug ===========================================================
+            if mode == 'debug':
+                print(['elif', 'done but step_beyond_done is None'])
+    
             # Pole just fell!
             self.steps_beyond_done = 0
-            reward = 1.0
+            reward = -100.0
+            
         else:
+            # debug ===========================================================
+            if mode == 'debug':
+                print(['else'])
             if self.steps_beyond_done == 0:
+                # debug =======================================================
+                if mode == 'debug':
+                    print(['else', 'done and step_beyond_done is 0'])
                 logger.warn(
                     "You are calling 'step()' even though this "
                     "environment has already returned done = True. You "
@@ -144,12 +172,22 @@ class CartPoleEnv(gym.Env):
             self.steps_beyond_done += 1
             reward = 0.0
             self.reset()
- 
+            
+        # debug ===============================================================
+        if mode == 'debug':
+            print(['step', 'a:', action, 'r:', reward, 'd:', done, 's_b_y:', self.steps_beyond_done])
+        
         return np.array(self.state), reward, done, {}
 
     def reset(self):
-        self.state = self.np_random.uniform(low=-0.05, high=0.05, size=(4,))
+        self.state = self.np_random.uniform(low=-0.05, high=0.05, size=(4,))       
         self.steps_beyond_done = None
+        
+        # debug ===============================================================
+        if mode == 'debug':
+            print(['reset'])
+            self.reward = 0
+                        
         return np.array(self.state)
 
     def render(self, mode='human'):
@@ -216,9 +254,12 @@ from stable_baselines3 import A2C
 from stable_baselines3.a2c import MlpPolicy
 from stable_baselines3.common.env_util import make_vec_env        
 from stable_baselines3.common.env_checker import check_env
+
+mode = 'debug'
+
 env = CartPoleEnv()
 # If the environment don't follow the interface, an error will be thrown
-check_env(env, warn=True)
+# check_env(env, warn=True)
 
 
 
@@ -226,10 +267,27 @@ check_env(env, warn=True)
 #env = make_vec_env('CartPole-v1', n_envs=4)
 
 model = A2C(MlpPolicy, env, verbose=1)
-model.learn(total_timesteps=100000)
+model.learn(total_timesteps=30)
 
-obs = env.reset()
-while True:
-    action, _states = model.predict(obs)
-    obs, rewards, dones, info = env.step(action)
-    env.render()
+# !!!
+# note that model.learn will automatically run reset() when done == True
+# init, step, step, step ... (done == True) step return, reset
+
+# mode = 'debug'
+# obs = env.reset()
+# i = 0
+# while i < 50:
+#     action, _states = model.predict(obs)
+#     obs, rewards, dones, info = env.step(action)
+#     env.render()
+#     i += 1
+    
+# !!!
+# custom testing code will not automatically reset env after done
+
+# not sure how evaluate_policy handle this
+
+# not sure how the kernel handle this (how return is computed)
+# 2021/04/03:
+# problem solved!
+# read modified a2c.py, on_policy_algorithm.py, buffer.py

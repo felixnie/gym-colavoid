@@ -14,7 +14,7 @@ class SimulationWrapper(gym.Wrapper):
   """
   def __init__(self, env):
     # Retrieve the action space
-    env.t = 0.04
+    env.t = 0.02
     env.num_intruders = 1
     
     # Call the parent constructor, so we can access self.env later
@@ -76,7 +76,7 @@ for env in env_dict:
 
 # wrapping
 env = SimulationWrapper(gym.make('gym_colavoid:ColAvoid-v0'))
-model = A2C.load("a2c_colavoid")
+model = A2C.load("a2c_colavoid02_400k_reproduce_tb")
 
 # start rendering
 obs = env.reset()

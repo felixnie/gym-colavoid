@@ -44,7 +44,7 @@ class ColAvoidEnvDiscrete(gym.Env):
 
         # INTRUDER PARAMETERS
         self.r = 0.4                            # radius (m)
-        self.s = 2                              # speed (m/s)
+        self.s = 1.5                              # speed (m/s)
         self.num_intruders = 1                  # number of intruders at the 
                                                 # same time
 

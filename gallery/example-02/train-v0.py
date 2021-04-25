@@ -8,6 +8,7 @@ from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 import time
 from stable_baselines3 import A2C
 from stable_baselines3.a2c import MlpPolicy
+import os
 
 
 # start timer
@@ -27,8 +28,13 @@ for env in env_dict:
 num_cpu = multiprocessing.cpu_count()
 
 # make env
+file_path = os.path.dirname(os.path.realpath(__file__))
+file_name = time.strftime("a2c_colavoid_%Y_%m_%d_%H_%M_%S")
+log_dir   = os.path.join(file_path, file_name)
+    
 env = make_vec_env('gym_colavoid:ColAvoid-v0', 
                    n_envs=num_cpu, 
+                   # monitor_dir=log_dir, 
                    vec_env_cls=SubprocVecEnv, 
                    vec_env_kwargs=dict(start_method='fork'))
 # for more info, see 
@@ -42,10 +48,10 @@ env = make_vec_env('gym_colavoid:ColAvoid-v0',
 # check_env(env, warn=True)
 
 # learning
-model = A2C(MlpPolicy, env, verbose=1)
+model = A2C(MlpPolicy, env, verbose=1, tensorboard_log="./a2c_colavoid_tensorboard/")
 
 model.learn(total_timesteps=400000) # 200s per 100000 steps
-model.save("a2c_colavoid")
+model.save("a2c_colavoid02_400k_reproduce_tb")
 
 # stop timer
 toc = time.time()

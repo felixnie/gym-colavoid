@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-# Simple Collision Avoidance Environment
+# Simple Collision Avoidance Environment 2
 # continuous action space & continuous observation space
 
 # changelog:
@@ -15,6 +15,8 @@
 #       corrected observation
 #   updated: 04/03/2021
 #       changed reward
+#   updated: 04/11/2021
+#       change actions so that normalization is not needed
 
 # Observation (states):
 #   X distance to N obstacles (direction + distance)
@@ -51,8 +53,8 @@ class ColAvoidEnv(gym.Env):
 
         # VEHICLE PARAMETERS
         self.R = 0.4                            # radius (m)
-        self.S = np.array([0.0, 1.0])           # range of speed (m/s)
-        self.DIR = np.array([-np.pi, np.pi])    # range of direction
+        # self.S = np.array([0.0, 1.0])           # range of speed (m/s)
+        # self.DIR = np.array([-np.pi, np.pi])    # range of direction
         self.num_agents = 1                     # number of vehicles
 
         # LiDAR PARAMETERS
@@ -69,16 +71,20 @@ class ColAvoidEnv(gym.Env):
 
         # ACTION SPACE
         # speed
-        min_speed   = np.ones(self.num_agents) * self.S[0]
-        max_speed   = np.ones(self.num_agents) * self.S[1]
-        # moving direction
-        min_dir     = np.ones(self.num_agents) * self.DIR[0]
-        max_dir     = np.ones(self.num_agents) * self.DIR[1]
-        
         self.action_space = gym.spaces.Box(
-            np.concatenate((min_speed, min_dir)), 
-            np.concatenate((max_speed, max_dir)),
+            np.array([-1, -1]), 
+            np.array([ 1,  1]),
             dtype=np.float32)
+        # min_speed   = np.ones(self.num_agents) * self.S[0]
+        # max_speed   = np.ones(self.num_agents) * self.S[1]
+        # # moving direction
+        # min_dir     = np.ones(self.num_agents) * self.DIR[0]
+        # max_dir     = np.ones(self.num_agents) * self.DIR[1]
+        
+        # self.action_space = gym.spaces.Box(
+        #     np.concatenate((min_speed, min_dir)), 
+        #     np.concatenate((max_speed, max_dir)),
+        #     dtype=np.float32)
 
 
         # OBSERVATION SPACE
@@ -338,14 +344,14 @@ class ColAvoidEnv(gym.Env):
         shape_param = 1 + 1e-2 # the smaller, the larger dynamic range log(x) is
         d = np.clip(self.dist_to_intruder(), a_min=self.R, a_max=self.max_lidar)
         # reward[0] = np.log((d-self.R+shift_param)/(5-self.R+shift_param)) / np.log(shape_param)
-        reward[0] = 1.0 if not self.done else 0.0
+        reward[0] = 1.0 if not self.done else -100.0
         
         # penalyze long distance to origins
         shape_param = 3
         d = self.dist_to_origin()
         reward[1] = - d ** shape_param
 
-        self.reward = 1 * reward[0] + 1 * reward[1] / 8 ** self.done
+        self.reward = 1 * reward[0] + 0.3 * reward[1]
         
         if mode == 'eval':
             print("[I] Eval mode: step. vel: %.1f, %.1f; rewards: %.1f, %.1f" % (self.vel_agents[0,0], 
@@ -373,8 +379,10 @@ class ColAvoidEnv(gym.Env):
 
     def move_agents(self):
         for i in range(self.num_agents):
-            dx = self.t * self.vel_agents[i, 0] * np.cos(self.vel_agents[i, 1])
-            dy = self.t * self.vel_agents[i, 0] * np.sin(self.vel_agents[i, 1])
+            # dx = self.t * self.vel_agents[i, 0] * np.cos(self.vel_agents[i, 1])
+            # dy = self.t * self.vel_agents[i, 0] * np.sin(self.vel_agents[i, 1])
+            dx = self.t * self.vel_agents[i, 0]
+            dy = self.t * self.vel_agents[i, 1]
             self.pos_agents[i] = self.pos_agents[i] + np.array([dx, dy])
 
 
@@ -610,10 +618,10 @@ if __name__ == '__main__':
     print("[I] Checking: monitored environment.")
     check_env(monitor_env, warn=True)       # this gives asymmetric action space warning
     
-    # norm_monitor_env = RescaleAction(monitor_env, -1.0, 1.0)
-    norm_monitor_env = NormalizeActionWrapper(monitor_env)
-    print("[I] Checking: normalized environment.")
-    check_env(norm_monitor_env, warn=True)  # this will pass with no warning
+    # # norm_monitor_env = RescaleAction(monitor_env, -1.0, 1.0)
+    # norm_monitor_env = NormalizeActionWrapper(monitor_env)
+    # print("[I] Checking: normalized environment.")
+    # check_env(norm_monitor_env, warn=True)  # this will pass with no warning
     
     
     ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
@@ -631,12 +639,12 @@ if __name__ == '__main__':
     log_dir   = os.path.join(file_path, file_name)
     # print("[I] File: directory '%s' created." % file_name)
     
-    vec_norm_monitor_env = make_vec_env(lambda: env, 
-                                        n_envs=num_cpu, 
-                                        # monitor_dir=log_dir, 
-                                        wrapper_class=NormalizeActionWrapper, 
-                                        vec_env_cls=SubprocVecEnv, 
-                                        vec_env_kwargs=dict(start_method='fork'))
+    vec_env = make_vec_env(lambda: env, 
+                           n_envs=num_cpu, 
+                           # monitor_dir=log_dir, 
+                           # wrapper_class=NormalizeActionWrapper, 
+                           vec_env_cls=SubprocVecEnv, 
+                           vec_env_kwargs=dict(start_method='fork'))
     # it is equivalent to:
     # env = gym.make('CartPole-v1')
     # env = Monitor(env, log_dir)
@@ -651,10 +659,10 @@ if __name__ == '__main__':
     '''
     Build model with vec_norm_monitor_env.
     '''
-    model = A2C("MlpPolicy", vec_norm_monitor_env, verbose=1, n_steps=5, 
-                tensorboard_log="./tb-colavoid-01/")
+    model = A2C("MlpPolicy", vec_env, verbose=1, n_steps=5,
+                tensorboard_log="./tb-colavoid-03/")
     # eval_env = monitor_env
-    eval_env = norm_monitor_env
+    eval_env = monitor_env
     
     
     ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
@@ -695,11 +703,10 @@ if __name__ == '__main__':
     tic = time.time()
     
     print("[I] Training started.")
-    os.system("tensorboard --logdir=./tb-colavoid-01/")
     model.learn(total_timesteps=1e6) # 200s per 100000 steps
-    
-    # file_name = time.strftime("a2c_colavoid_%Y_%m_%d_%H_%M_%S")
-    # model.save(file_name)
+    # os.system("tensorboard --logdir=./tb-colavoid-03/")
+    file_name = time.strftime("a2c_colavoid_%Y_%m_%d_%H_%M_%S")
+    model.save(file_name)
     # print("[I] File: model '%s' saved." % file_name)
     
     toc = time.time()
@@ -744,13 +751,10 @@ if __name__ == '__main__':
         """
         :param env: (gym.Env) Gym environment that will be wrapped
         """
-        def __init__(self, env):
-            # retrieve the action space
-            env.t = 0.01
-            
+        def __init__(self, env):          
             # call the parent constructor, so we can access self.env later
             super(SimulationWrapper, self).__init__(env)
-            
+            self.env.t = 0.02
             self.n_steps = 0
             self.avg_steps = 1
             self.n_episodes = 0
@@ -793,38 +797,38 @@ if __name__ == '__main__':
     ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 
 
-    # model = A2C.load("a2c_colavoid02_400k")
+    model = A2C.load(file_name)
     
-    # '''
-    # Testing without warpping.
-    # '''
-    # mode = 'test'
-    # test_env = eval_env
-    # obs = test_env.reset()
-    # n_steps = 0
-    # while n_steps <= 30:
-    #     action, _states = model.predict(obs)
-    #     obs, rewards, dones, info = test_env.step(action)
-    #     test_env.render()
-    #     print("[I] Test mode. n_steps: %d" % n_steps)
-    #     n_steps += 1
-    # input("Press Enter to continue...")
-    # test_env.close()
+    '''
+    Testing without warpping.
+    '''
+    mode = 'test'
+    test_env = eval_env
+    obs = test_env.reset()
+    n_steps = 0
+    while n_steps <= 30:
+        action, _states = model.predict(obs)
+        obs, rewards, dones, info = test_env.step(action)
+        test_env.render()
+        print("[I] Test mode. n_steps: %d" % n_steps)
+        n_steps += 1
+    input("Press Enter to continue...")
+    test_env.close()
 
     
     '''
     Testing with warpping.
     '''
-    test_env = SimulationWrapper(eval_env)
-    mode = 'test'
-    obs = test_env.reset()
-    while test_env.n_episodes <= 3:
-        action, _states = model.predict(obs)
-        obs, rewards, dones, info = test_env.step(action)
-        print("[I] Test mode. n_episodes: %d" % test_env.n_episodes)
-        test_env.render()
-    input("Press Enter to continue...")
-    test_env.close()
+    # test_env = SimulationWrapper(eval_env)
+    # mode = 'test'
+    # obs = test_env.reset()
+    # while test_env.n_episodes <= 20:
+    #     action, _states = model.predict(obs)
+    #     obs, rewards, dones, info = test_env.step(action)
+    #     print("[I] Test mode. n_episodes: %d" % test_env.n_episodes)
+    #     test_env.render()
+    # input("Press Enter to continue...")
+    # test_env.close()
 
     
     ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
